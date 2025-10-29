@@ -1,0 +1,2031 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Medical Warehouse Inventory System</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chart.js Datalabels Plugin for percentages on slices -->
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    <!-- JsBarcode Library for Barcode Generation -->
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+    <style>
+        /* Highlight active nav button */
+        .nav-btn.active {
+            color: #2563eb;
+            font-weight: bold;
+        }
+        /* Custom Modal Styling */
+        .modal {
+            display: none; /* Hidden by default */
+            position: fixed; /* Stay in place */
+            z-index: 1000; /* Sit on top */
+            left: 0;
+            top: 0;
+            width: 100%; /* Full width */
+            height: 100%; /* Full height */
+            overflow: auto; /* Enable scroll if needed */
+            background-color: rgba(0,0,0,0.4); /* Black w/ opacity */
+            justify-content: center;
+            align-items: center;
+        }
+        .modal-content {
+            background-color: #fefefe;
+            margin: auto;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            width: 80%;
+            max-width: 500px;
+            text-align: center;
+        }
+        .close-button {
+            color: #aaa;
+            float: right;
+            font-size: 28px;
+            font-weight: bold;
+        }
+        .close-button:hover,
+        .close-button:focus {
+            color: black;
+            text-decoration: none;
+            cursor: pointer;
+        }
+        #barcodeDisplayContainer {
+            margin-top: 20px;
+            padding: 15px;
+            border: 1px dashed #ccc;
+            border-radius: 8px;
+            background-color: #f9f9f9;
+            text-align: center;
+        }
+        .picked-item {
+            background-color: #e6ffed; /* Light green for picked items */
+        }
+
+        /* Ensure main content area handles overflow consistently */
+        main {
+            overflow-y: auto; /* Always show scrollbar if content exceeds height */
+            flex-grow: 1; /* Allow it to take available space */
+        }
+        body {
+            min-height: 100vh; /* Ensure body takes at least full viewport height */
+            display: flex;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 flex min-h-screen font-sans">
+
+    <!-- Sidebar navigation -->
+    <nav class="w-64 bg-white shadow-lg flex flex-col p-6 rounded-r-lg">
+        <h1 class="text-2xl font-bold mb-8 text-blue-800">🏥 Warehouse System</h1>
+        <ul class="space-y-4 flex flex-col">
+            <li><button data-page="dashboard" class="nav-btn text-left w-full font-semibold text-gray-700 hover:text-blue-600 focus:outline-none focus:text-blue-600 rounded-md p-2 transition duration-150 ease-in-out">Dashboard</button></li>
+            <li><button data-page="inbound" class="nav-btn text-left w-full font-semibold text-gray-700 hover:text-blue-600 focus:outline-none focus:text-blue-600 rounded-md p-2 transition duration-150 ease-in-out">Inbound Stock Entry</button></li>
+            <li><button data-page="add-product" class="nav-btn text-left w-full font-semibold text-gray-700 hover:text-blue-600 focus:outline-none focus:text-blue-600 rounded-md p-2 transition duration-150 ease-in-out">Add New Product</button></li>
+            <li><button data-page="manage-locations" class="nav-btn text-left w-full font-semibold text-gray-700 hover:text-blue-600 focus:outline-none focus:text-blue-600 rounded-md p-2 transition duration-150 ease-in-out">Manage Locations</button></li>
+            <li><button data-page="analytics" class="nav-btn text-left w-full font-semibold text-gray-700 hover:text-blue-600 focus:outline-none focus:text-blue-600 rounded-md p-2 transition duration-150 ease-in-out">Analytics</button></li>
+            <li><button data-page="storage" class="nav-btn text-left w-full font-semibold text-gray-700 hover:text-blue-600 focus:outline-none focus:text-blue-600 rounded-md p-2 transition duration-150 ease-in-out">Storage Map</button></li>
+            <li><button data-page="order" class="nav-btn text-left w-full font-semibold text-gray-700 hover:text-blue-600 focus:outline-none focus:text-blue-600 rounded-md p-2 transition duration-150 ease-in-out">Create Order</button></li>
+            <li><button data-page="picklist" class="nav-btn text-left w-full font-semibold text-gray-700 hover:text-blue-600 focus:outline-none focus:text-blue-600 rounded-md p-2 transition duration-150 ease-in-out">Pick List</button></li>
+        </ul>
+    </nav>
+
+    <!-- Main content area -->
+    <main class="flex-grow p-6 overflow-auto">
+
+        <!-- Dashboard -->
+        <section id="dashboard" class="page-section">
+            <header class="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
+                <h2 class="text-3xl font-bold text-gray-800 mb-4 md:mb-0">📦 Medical Warehouse Inventory</h2>
+                <div class="flex flex-col md:flex-row gap-2">
+                    <input type="text" id="searchInput" placeholder="Search items..." class="px-4 py-2 border rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500"/>
+                    <select id="filterType" class="px-4 py-2 border rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">All Types</option>
+                        <option value="Cold Storage">Cold Storage</option>
+                        <option value="Ambient">Ambient</option>
+                        <!-- Removed Hazardous and Quarantine as per previous request -->
+                        <!-- <option value="Hazardous">Hazardous</option> -->
+                        <!-- <option value="Quarantine">Quarantine</option> -->
+                    </select>
+                    <input type="date" id="filterDate" class="px-4 py-2 border rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500" />
+                </div>
+            </header>
+
+            <div class="overflow-x-auto bg-white shadow-md rounded-lg mb-6">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th onclick="sortTable(0, 'dashboardTableBody')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer">Name</th>
+                            <th onclick="sortTable(1, 'dashboardTableBody')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer">Type</th>
+                            <th onclick="sortTable(2, 'dashboardTableBody')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer">Size</th>
+                            <th onclick="sortTable(3, 'dashboardTableBody')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer">Expiry Date</th>
+                            <th onclick="sortTable(4, 'dashboardTableBody')" class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase cursor-pointer">Quantity</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th> <!-- Added for dashboard -->
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="dashboardTableBody" class="bg-white divide-y divide-gray-200">
+                        <!-- Data will be loaded here from the backend -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h3 class="text-xl font-semibold mb-4 text-gray-800">📋 Recent Orders</h3>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full divide-y divide-gray-200">
+                        <thead class="bg-gray-50">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Date</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Items</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recentOrdersTableBody" class="bg-white divide-y divide-gray-200">
+                            <!-- Recent orders will be loaded here -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- START OF MOVED ALERTS SECTION -->
+            <section id="alerts" class="bg-white p-6 rounded-lg shadow-md mt-6">
+                <h2 class="text-2xl font-bold mb-6 text-gray-800">⚠ Alerts</h2>
+                <div class="mb-4 flex justify-between items-center">
+                    <h3 class="text-lg font-semibold text-gray-800">Current Alerts</h3>
+                    <button id="refreshAlertsBtn" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300">Refresh Alerts</button>
+                </div>
+                <div id="alertsContainer" class="space-y-4">
+                    <!-- Temperature logging for testing -->
+                    <div class="bg-gray-50 p-4 rounded-lg shadow-sm">
+                        <h3 class="text-lg font-semibold mb-2 text-gray-700">Simulate Temperature Reading:</h3>
+                        <div class="flex items-end gap-2">
+                            <div class="flex-grow">
+                                <label class="block text-sm font-medium text-gray-600" for="tempLocation">Location</label>
+                                <select id="tempLocation" class="w-full border border-gray-300 px-3 py-2 rounded-md text-sm">
+                                    <option value="">Select Location</option>
+                                    <!-- Locations will be loaded -->
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-gray-600" for="tempReading">Temperature (°C)</label>
+                                <input type="number" step="0.1" id="tempReading" class="w-full border border-gray-300 px-3 py-2 rounded-md text-sm" placeholder="e.g., 4.5"/>
+                            </div>
+                            <button id="logTempBtn" class="bg-blue-500 text-white px-4 py-2 rounded-md text-sm hover:bg-blue-600">Log Temp</button>
+                        </div>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-lg shadow-sm">
+                        <h3 class="text-lg font-semibold mb-2 text-gray-700">Expiry Alerts:</h3>
+                        <ul id="expiryAlertsList" class="list-disc list-inside space-y-1 text-sm">
+                            <!-- Expiry alerts will be loaded here -->
+                        </ul>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-lg shadow-sm">
+                        <h3 class="text-lg font-semibold mb-2 text-gray-700">Stock Alerts:</h3>
+                        <ul id="stockAlertsList" class="list-disc list-inside space-y-1 text-sm">
+                            <!-- Stock alerts will be loaded here -->
+                        </ul>
+                    </div>
+
+                    <div class="bg-white p-4 rounded-lg shadow-sm">
+                        <h3 class="text-lg font-semibold mb-2 text-gray-700">Temperature Alerts:</h3>
+                        <ul id="temperatureAlertsList" class="list-disc list-inside space-y-1 text-sm">
+                            <!-- Temperature alerts will be loaded here -->
+                        </ul>
+                    </div>
+                </div>
+            </section>
+            <!-- END OF MOVED ALERTS SECTION -->
+
+        </section>
+
+        <!-- Inbound Stock Entry -->
+        <section id="inbound" class="page-section hidden max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">➕ Inbound Stock Entry (Add New Batch)</h2>
+            <form id="inboundForm" class="space-y-4">
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="productName">Product Name</label>
+                    <select id="productName" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        <option value="">Select Product</option>
+                        <!-- Products will be loaded here -->
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="batchNumber">Batch Number</label>
+                    <input type="text" id="batchNumber" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="manufactureDate">Manufacture Date</label>
+                    <input type="date" id="manufactureDate" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="expiryDate">Expiry Date</label>
+                    <input type="date" id="expiryDate" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="quantity">Quantity</label>
+                    <input type="number" id="quantity" min="1" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <!-- Removed manual storageLocation dropdown -->
+                <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700 transition duration-150 ease-in-out shadow-lg">Add Stock</button>
+            </form>
+
+            <div id="barcodeDisplayContainer" class="hidden mt-6">
+                <h3 class="text-xl font-semibold mb-4 text-gray-800">Generated Barcode:</h3>
+                <svg id="batchBarcode"></svg>
+                <p id="barcodeInfo" class="text-sm text-gray-600 mt-2"></p>
+                <button onclick="printBarcode()" class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 mt-4">Print Barcode</button>
+            </div>
+        </section>
+
+        <!-- Add New Product Page -->
+        <section id="add-product" class="page-section hidden max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">🆕 Add New Product Type</h2>
+            <form id="newProductForm" class="space-y-4">
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="newProductName">Product Name</label>
+                    <input type="text" id="newProductName" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="newProductDescription">Description (e.g., Small, Medium, Large)</label>
+                    <input type="text" id="newProductDescription" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Small, Sterile, 100ml"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="newProductManufacturer">Manufacturer</label>
+                    <input type="text" id="newProductManufacturer" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="newProductCategory">Category</label>
+                    <select id="newProductCategory" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        <option value="Ambient">Ambient</option>
+                        <option value="Cold Storage">Cold Storage</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="newProductPrice">Price</label>
+                    <input type="number" step="0.01" id="newProductPrice" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700 transition duration-150 ease-in-out shadow-lg">Add Product</button>
+            </form>
+        </section>
+
+        <!-- NEW SECTION: Manage Locations Page -->
+        <section id="manage-locations" class="page-section hidden max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">🏗 Manage Storage Locations</h2>
+            <form id="addLocationForm" class="space-y-4">
+                <h3 class="text-xl font-semibold mb-4 text-gray-700">Add New Location:</h3>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="locationZone">Zone (e.g., A, Cold_A)</label>
+                    <input type="text" id="locationZone" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="locationRack">Rack (e.g., R1, R2)</label>
+                    <input type="text" id="locationRack" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="locationSlot">Slot (e.g., S1, S2)</label>
+                    <input type="text" id="locationSlot" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="locationType">Location Type</label>
+                    <select id="locationType" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                        <option value="Ambient">Ambient</option>
+                        <option value="Cold Storage">Cold Storage</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="locationSizeType">Size Type</label>
+                    <input type="text" id="locationSizeType" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="e.g., Large, Medium, Small"/>
+                </div>
+                <div>
+                    <label class="block font-semibold mb-1 text-gray-700" for="locationCapacity">Capacity</label>
+                    <input type="number" id="locationCapacity" min="1" required class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                </div>
+                <div id="temperatureFields" class="space-y-4 hidden">
+                    <h4 class="text-lg font-semibold text-gray-700">Temperature Range (for Cold Storage):</h4>
+                    <div>
+                        <label class="block font-semibold mb-1 text-gray-700" for="minTemp">Min Temperature (°C)</label>
+                        <input type="number" step="0.1" id="minTemp" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                    </div>
+                    <div>
+                        <label class="block font-semibold mb-1 text-gray-700" for="maxTemp">Max Temperature (°C)</label>
+                        <input type="number" step="0.1" id="maxTemp" class="w-full border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500"/>
+                    </div>
+                </div>
+                <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700 transition duration-150 ease-in-out shadow-lg">Add Location</button>
+            </form>
+        </section>
+
+        <!-- Analytics Page -->
+        <section id="analytics" class="page-section hidden max-w-sm mx-auto bg-white p-6 rounded-lg shadow-md flex flex-col items-center">
+            <h2 class="text-2xl font-bold mb-4 text-gray-800">📊 Analytics - Inventory Overview</h2>
+            <!-- Explicitly sized div to control the chart's render area -->
+            <div style="position: relative; height: 350px; width: 350px;">
+                <canvas id="inventoryChart"></canvas>
+            </div>
+        </section>
+
+
+        <!-- Storage Map -->
+        <section id="storage" class="page-section hidden max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">🗺 Storage Map (Rack Layout)</h2>
+            <div id="rackGrid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                <!-- Racks will be generated here -->
+            </div>
+        </section>
+
+        <!-- Create Order -->
+        <section id="order" class="page-section hidden max-w-3xl mx-auto bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">🛒 Create Order</h2>
+            <form id="orderForm" class="space-y-4">
+                <div id="orderItemsContainer" class="space-y-4 border p-4 rounded-md">
+                    <h3 class="font-semibold text-gray-700">Order Items:</h3>
+                    <!-- Initial item row -->
+                    <div class="order-item flex flex-col sm:flex-row gap-2 items-end">
+                        <div class="flex-grow">
+                            <label for="orderProduct1" class="block font-semibold mb-1 text-gray-700">Product</label>
+                            <select id="orderProduct1" class="w-full border border-gray-300 px-3 py-2 rounded-md product-select" required>
+                                <option value="">Select Product</option>
+                                <!-- Products will be loaded here -->
+                            </select>
+                        </div>
+                        <div>
+                            <label for="orderQuantity1" class="block font-semibold mb-1 text-gray-700">Quantity</label>
+                            <input type="number" id="orderQuantity1" min="1" required class="w-full border border-gray-300 px-3 py-2 rounded-md quantity-input"/>
+                        </div>
+                        <button type="button" class="bg-red-500 text-white px-3 py-2 rounded-md hover:bg-red-600 remove-item-btn hidden">Remove</button>
+                    </div>
+                </div>
+                <button type="button" id="addOrderItemBtn" class="bg-gray-200 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-300 transition duration-150 ease-in-out shadow-sm">Add Another Item</button>
+                <button type="submit" class="bg-blue-600 text-white px-5 py-2 rounded-md hover:bg-blue-700 transition duration-150 ease-in-out shadow-lg">Place Order</button>
+            </form>
+        </section>
+
+        <!-- Pick List -->
+        <section id="picklist" class="page-section hidden max-w-4xl mx-auto bg-white p-6 rounded-lg shadow-md">
+            <h2 class="text-2xl font-bold mb-6 text-gray-800">📝 Pick List</h2>
+            <div class="mb-4">
+                <label for="barcodeScannerInput" class="block font-semibold mb-1 text-gray-700">Scan Barcode (Manual Input):</label>
+                <div class="flex gap-2">
+                    <input type="text" id="barcodeScannerInput" class="flex-grow border border-gray-300 px-3 py-2 rounded-md focus:ring-blue-500 focus:border-blue-500" placeholder="Enter barcode and press Enter"/>
+                    <button id="verifyBarcodeBtn" class="bg-blue-500 text-white px-4 py-2 rounded-md hover:bg-blue-600">Verify</button>
+                </div>
+                <div id="barcodeVerificationResult" class="mt-2 text-sm"></div>
+            </div>
+
+            <div class="overflow-x-auto bg-white shadow-md rounded-lg mb-6">
+                <table class="min-w-full divide-y divide-gray-200">
+                    <thead class="bg-gray-50">
+                        <tr>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Order ID</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Product</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Batch Number</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Qty to Pick</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Location</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Pick Status</th>
+                            <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pickListBody" class="bg-white divide-y divide-gray-200">
+                        <!-- Pick list data will be loaded here -->
+                    </tbody>
+                </table>
+            </div>
+            <button id="markAllDispatchedBtn" class="bg-green-600 text-white px-5 py-2 rounded-md hover:bg-green-700 transition duration-150 ease-in-out shadow-lg">Mark All Order as Dispatched</button>
+        </section>
+    </main>
+
+    <!-- Custom Modal for Alerts/Confirmations -->
+    <div id="myModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <p id="modalMessage" class="text-lg font-semibold text-gray-800"></p>
+            <div id="modalActions" class="mt-4 flex justify-center gap-4">
+                <!-- Buttons will be dynamically added here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Barcode View Modal -->
+    <div id="barcodeViewModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeBarcodeViewModal()">&times;</span>
+            <h3 class="text-xl font-semibold mb-4 text-gray-800">Barcode for Batch: <span id="viewBarcodeBatchNumber"></span></h3>
+            <svg id="viewBarcodeSvg"></svg>
+            <p id="viewBarcodeInfo" class="text-sm text-gray-600 mt-2"></p>
+            <button onclick="printViewedBarcode()" class="bg-gray-500 text-white px-4 py-2 rounded-md hover:bg-gray-600 mt-4">Print Barcode</button>
+        </div>
+    </div>
+
+
+<script>
+    const API_BASE_URL = 'http://localhost:3000'; // Your backend server URL
+    let alertsRefreshInterval; // To store the interval ID for alerts auto-refresh
+    let inventoryChart; // Declare chart variable globally
+
+    // Register the Chart.js Datalabels plugin
+    Chart.register(ChartDataLabels);
+
+    // --- Utility Functions ---
+    function showModal(message, type = 'info', onConfirm = null) {
+        const modal = document.getElementById('myModal');
+        const modalMessage = document.getElementById('modalMessage');
+        const modalActions = document.getElementById('modalActions');
+
+        modalMessage.innerText = message;
+        modalActions.innerHTML = ''; // Clear previous buttons
+
+        if (type === 'confirm' && onConfirm) {
+            const confirmBtn = document.createElement('button');
+            confirmBtn.innerText = 'Confirm';
+            confirmBtn.className = 'bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition duration-150 ease-in-out';
+            confirmBtn.onclick = () => {
+                onConfirm();
+                modal.style.display = 'none';
+            };
+            modalActions.appendChild(confirmBtn);
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.innerText = 'Cancel';
+            cancelBtn.className = 'bg-gray-300 text-gray-800 px-4 py-2 rounded-md hover:bg-gray-400 transition duration-150 ease-in-out';
+            cancelBtn.onclick = () => {
+                modal.style.display = 'none';
+            };
+            modalActions.appendChild(cancelBtn);
+        } else {
+            const okBtn = document.createElement('button');
+            okBtn.innerText = 'OK';
+            okBtn.className = 'bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700 transition duration-150 ease-in-out';
+            okBtn.onclick = () => {
+                modal.style.display = 'none';
+            };
+            modalActions.appendChild(okBtn);
+        }
+
+        modal.style.display = 'flex'; // Show the modal
+    }
+
+    // Close modal when close button is clicked
+    document.querySelector('#myModal .close-button').addEventListener('click', () => {
+        document.getElementById('myModal').style.display = 'none';
+    });
+
+    // Close modal when clicking outside of the modal content
+    window.addEventListener('click', (event) => {
+        const modal = document.getElementById('myModal');
+        if (event.target === modal) {
+            modal.style.display = 'none';
+        }
+    });
+
+    // Helper to format date toYYYY-MM-DD
+    function formatDateToYYYYMMDD(dateString) {
+        if (!dateString) return null;
+        const date = new Date(dateString);
+        // GetYYYY, MM, DD and pad with leading zeros if necessary
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0'); // Month is 0-indexed
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+
+    // --- Navigation Handling ---
+    const navButtons = document.querySelectorAll('.nav-btn');
+    const pages = document.querySelectorAll('.page-section');
+
+    function showPage(pageId) {
+        pages.forEach(p => {
+            p.classList.add('hidden');
+        });
+        document.getElementById(pageId).classList.remove('hidden');
+
+        navButtons.forEach(btn => {
+            if (btn.getAttribute('data-page') === pageId) {
+                btn.classList.add('active');
+            } else {
+                btn.classList.remove('active');
+            }
+        });
+
+        // Clear alerts refresh interval if moving away from alerts page
+        if (alertsRefreshInterval) {
+            clearInterval(alertsRefreshInterval);
+            alertsRefreshInterval = null;
+        }
+
+        // Trigger data load for the displayed page
+        if (pageId === 'dashboard') {
+            loadDashboardData();
+            loadRecentOrders(); // Load recent orders on dashboard
+            loadStorageLocationsForInbound(); // Needed for temp log dropdown on dashboard
+            loadAlertsData(); // Load alerts data when dashboard loads
+            // Set up auto-refresh for alerts every 30 seconds when on dashboard
+            if (alertsRefreshInterval) {
+                clearInterval(alertsRefreshInterval); // Clear any existing interval
+            }
+            alertsRefreshInterval = setInterval(loadAlertsData, 30000);
+        } else if (pageId === 'inbound') {
+            loadProductsForInbound();
+            // loadStorageLocationsForInbound(); // Not needed here anymore as manual selection is removed
+            document.getElementById('barcodeDisplayContainer').classList.add('hidden'); // Hide barcode display on page load
+        } else if (pageId === 'add-product') {
+            document.getElementById('newProductForm').reset(); // Clear form on page load
+        }
+        else if (pageId === 'manage-locations') { // NEW: Load data for manage locations page
+            document.getElementById('addLocationForm').reset(); // Clear form on page load
+            toggleTempFields(); // Reset temp fields visibility
+        }
+        else if (pageId === 'analytics') {
+            loadAnalyticsData();
+        }
+        else if (pageId === 'storage') {
+            loadStorageMapData();
+        } else if (pageId === 'order') {
+            loadProductsForOrder();
+        } else if (pageId === 'picklist') {
+            loadPickListData();
+            document.getElementById('barcodeVerificationResult').innerHTML = ''; // Clear verification result
+            document.getElementById('barcodeScannerInput').value = ''; // Clear barcode input
+        }
+        // Alerts page is now part of dashboard, so no separate 'else if (pageId === 'alerts')'
+    }
+
+    navButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+            showPage(btn.getAttribute('data-page'));
+        });
+    });
+
+    // Set initial page to dashboard
+    document.addEventListener('DOMContentLoaded', () => {
+        showPage('dashboard');
+    });
+
+    // --- Dashboard Functions ---
+    let allBatches = []; // To store all fetched batch data for filtering/sorting
+
+    async function loadDashboardData() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/batches`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const batches = await response.json();
+            allBatches = batches; // Store for filtering
+            renderDashboardTable(batches);
+        } catch (error) {
+            console.error('Error fetching dashboard data:', error);
+            showModal('Failed to load dashboard data. Please check the backend server and database schema.', 'error');
+        }
+    }
+
+    function renderDashboardTable(batches) {
+        const dashboardTableBody = document.getElementById('dashboardTableBody');
+        dashboardTableBody.innerHTML = ''; // Clear existing rows
+
+        batches.forEach(batch => {
+            // Determine display text for location
+            const locationText = (batch.zone && batch.rack && batch.slot) ?
+                                 `${batch.zone}-${batch.rack}-${batch.slot}` :
+                                 'Unassigned';
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4">${batch.product_name || 'N/A'}</td>
+                <td class="px-6 py-4">${batch.product_type || 'N/A'}</td>
+                <td class="px-6 py-4">${batch.product_description ? (batch.product_description.length > 20 ? batch.product_description.substring(0, 20) + '...' : batch.product_description) : 'N/A'}</td>
+                <td class="px-6 py-4">${batch.expiry_date ? formatDateToYYYYMMDD(batch.expiry_date) : 'N/A'}</td>
+                <td class="px-6 py-4">${batch.quantity}</td>
+                <td class="px-6 py-4">${locationText}</td> <!-- Display location -->
+                <td class="px-6 py-4">
+                    <button data-batch-id="${batch.batch_id}" onclick="editDashboardRow(this)" class="text-blue-500 hover:underline mr-2">Edit</button>
+                    <button data-batch-id="${batch.batch_id}" onclick="deleteDashboardRow(this)" class="text-red-500 hover:underline mr-2">Delete</button>
+                    <button data-batch-id="${batch.batch_id}" data-batch-number="${batch.batch_number}" data-barcode="${batch.barcode}" onclick="showBarcodeModal(this)" class="text-green-500 hover:underline">View Barcode</button>
+                </td>
+            `;
+            dashboardTableBody.appendChild(row);
+        });
+    }
+
+    // --- Analytics Page Chart Function ---
+    async function loadAnalyticsData() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/batches`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const batches = await response.json();
+            updateInventoryChart(batches); // Call chart update function here
+        } catch (error) {
+            console.error('Error fetching analytics data:', error);
+            showModal('Failed to load analytics data. Please check the backend server and database schema.', 'error');
+        }
+    }
+
+    function updateInventoryChart(batches) {
+        const productQuantities = {};
+        batches.forEach(batch => {
+            const productName = batch.product_name || 'Unknown Product';
+            productQuantities[productName] = (productQuantities[productName] || 0) + batch.quantity;
+        });
+
+        const labels = Object.keys(productQuantities);
+        const data = Object.values(productQuantities);
+
+        // Define a consistent color palette for the pie chart
+        const backgroundColors = [
+            '#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#6b7280',
+            '#06b6d4', '#a855f7', '#f43f5e', '#22c55e', '#eab308', '#6366f1', '#fb7185'
+        ];
+
+        if (inventoryChart) {
+            inventoryChart.data.labels = labels;
+            inventoryChart.data.datasets[0].data = data;
+            inventoryChart.data.datasets[0].backgroundColor = backgroundColors.slice(0, labels.length);
+            inventoryChart.update();
+        } else {
+            const ctx = document.getElementById('inventoryChart').getContext('2d');
+            inventoryChart = new Chart(ctx, {
+                type: 'pie', // Changed to pie chart
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Quantity',
+                        data: data,
+                        backgroundColor: backgroundColors.slice(0, labels.length),
+                        borderColor: '#fff', // Border for segments
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right', // Place legend to the right
+                            labels: {
+                                boxWidth: 20,
+                                padding: 15
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed !== null) {
+                                        label += context.parsed + ' units';
+                                    }
+                                    return label;
+                                }
+                            }
+                        },
+                        datalabels: { // Datalabels plugin configuration
+                            color: '#fff', // White color for labels for better contrast
+                            formatter: (value, context) => {
+                                const total = context.chart.data.datasets[0].data.reduce((sum, val) => sum + val, 0);
+                                const percentage = ((value / total) * 100).toFixed(1); // Calculate percentage with 1 decimal place
+                                return percentage + '%';
+                            },
+                            font: {
+                                weight: 'bold',
+                                size: 14 // Make font slightly larger for visibility
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    // Sorting function for dashboard table
+    function sortTable(colIndex, tbodyId) {
+        const tbody = document.getElementById(tbodyId);
+        let rows = Array.from(tbody.rows);
+
+        let asc = tbody.asc = !tbody.asc; // toggle ascending/descending
+
+        rows.sort((a,b) => {
+            let valA = a.cells[colIndex].innerText.toLowerCase();
+            let valB = b.cells[colIndex].innerText.toLowerCase();
+
+            // Handle quantity column (numeric)
+            if(colIndex === 4) {
+                return asc ? parseInt(valA) - parseInt(valB) : parseInt(valB) - parseInt(valA);
+            }
+            // Handle date column (Expiry Date)
+            if(colIndex === 3) {
+                const dateA = new Date(valA);
+                const dateB = new Date(valB);
+                return asc ? dateA.getTime() - dateB.getTime() : dateB.getTime() - dateA.getTime();
+            }
+            // Default: string comparison for other columns
+            return asc ? valA.localeCompare(valB) : valB.localeCompare(valA);
+        });
+
+        rows.forEach(row => tbody.appendChild(row));
+    }
+
+    // Filter & Search for Dashboard
+    const searchInput = document.getElementById('searchInput');
+    const filterType = document.getElementById('filterType');
+    const filterDate = document.getElementById('filterDate');
+
+    function filterDashboard() {
+        const searchVal = searchInput.value.toLowerCase();
+        const typeVal = filterType.value;
+        const dateVal = filterDate.value ? new Date(filterDate.value) : null;
+
+        const filteredBatches = allBatches.filter(batch => {
+            const name = (batch.product_name || '').toLowerCase();
+            const type = batch.product_type || '';
+            const expiry = batch.expiry_date ? new Date(batch.expiry_date) : null;
+
+            let matchesSearch = name.includes(searchVal);
+            let matchesType = !typeVal || type === typeVal;
+            let matchesDate = !dateVal || (expiry && expiry >= dateVal);
+
+            return matchesSearch && matchesType && matchesDate;
+        });
+        renderDashboardTable(filteredBatches);
+    }
+
+    searchInput.addEventListener('input', filterDashboard);
+    filterType.addEventListener('change', filterDashboard);
+    filterDate.addEventListener('change', filterDashboard);
+
+    // Edit row inline on dashboard
+    async function editDashboardRow(btn) {
+        const row = btn.closest('tr');
+        const batchId = btn.getAttribute('data-batch-id');
+        const cells = row.cells;
+
+        if (btn.innerText === 'Edit') {
+            const originalExpiry = cells[3].innerText;
+            const originalQuantity = cells[4].innerText;
+            const originalLocationText = cells[5].innerText; // Get original location text
+
+            cells[3].innerHTML = `<input type="date" value="${originalExpiry}" class="border rounded px-2 py-1 w-full"/>`;
+            cells[4].innerHTML = `<input type="number" value="${originalQuantity}" min="0" class="border rounded px-2 py-1 w-full"/>`;
+            // Location cell is not editable as per requirement (smart allocation only)
+            // cells[5].innerHTML = `<input type="text" value="${originalLocationText}" class="border rounded px-2 py-1 w-full"/>`; // If you want to make location editable
+
+            btn.innerText = 'Save';
+            const deleteBtn = row.querySelector('.text-red-500');
+            if (deleteBtn) deleteBtn.classList.add('hidden'); // Hide delete during edit
+            const viewBarcodeBtn = row.querySelector('.text-green-500');
+            if (viewBarcodeBtn) viewBarcodeBtn.classList.add('hidden'); // Hide view barcode during edit
+        } else { // Save
+            const newExpiry = cells[3].querySelector('input').value;
+            const newQuantity = parseInt(cells[4].querySelector('input').value);
+
+            const batchToUpdate = allBatches.find(b => b.batch_id == batchId);
+            if (!batchToUpdate) {
+                showModal('Error: Batch not found for update.', 'error');
+                loadDashboardData(); // Reload to revert changes
+                return;
+            }
+
+            try {
+                const response = await fetch(`${API_BASE_URL}/batches/${batchId}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        product_id: batchToUpdate.product_id,
+                        batch_number: batchToUpdate.batch_number,
+                        manufacture_date: batchToUpdate.manufacture_date ? formatDateToYYYYMMDD(batchToUpdate.manufacture_date) : null,
+                        expiry_date: newExpiry ? formatDateToYYYYMMDD(newExpiry) : null,
+                        quantity: newQuantity,
+                        barcode: batchToUpdate.barcode,
+                        status: batchToUpdate.status // Maintain current status
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                showModal('Batch updated successfully!', 'info');
+                loadDashboardData(); // Reload data after successful update
+            }
+            catch (error) {
+                console.error('Error updating batch:', error);
+                showModal(`Failed to update batch: ${error.message}`, 'error');
+                loadDashboardData(); // Reload to revert changes
+            }
+        }
+    }
+
+    async function deleteDashboardRow(btn) {
+        const batchId = btn.getAttribute('data-batch-id');
+        showModal('Are you sure you want to delete this batch? This action cannot be undone.', 'confirm', async () => {
+            try {
+                const response = await fetch(`${API_BASE_URL}/batches/${batchId}`, {
+                    method: 'DELETE'
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                showModal('Batch deleted successfully!', 'info');
+                loadDashboardData(); // Reload data after successful deletion
+            } catch (error) {
+                console.error('Error deleting batch:', error);
+                showModal(`Failed to delete batch: ${error.message}`, 'error');
+            }
+        });
+    }
+
+    // --- Recent Orders Display ---
+   async function loadRecentOrders() {
+        try {
+            // Added cache: 'no-store' to ensure fresh data from backend
+            const response = await fetch(`${API_BASE_URL}/orders`, { cache: 'no-store' });
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const orders = await response.json();
+            renderRecentOrdersTable(orders);
+        } catch (error) {
+            console.error('Error fetching recent orders:', error);
+            document.getElementById('recentOrdersTableBody').innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-red-500">Failed to load recent orders.</td></tr>';
+        }
+    }
+
+    function renderRecentOrdersTable(orders) {
+        const recentOrdersTableBody = document.getElementById('recentOrdersTableBody');
+        recentOrdersTableBody.innerHTML = '';
+        if (orders.length === 0) {
+            recentOrdersTableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">No recent orders.</td></tr>';
+            return;
+        }
+
+        // Sort orders by order_date in descending order (most recent first)
+        orders.sort((a, b) => new Date(b.order_date) - new Date(a.order_date));
+
+        // Display only the last 10 orders for brevity
+        const displayOrders = orders.slice(0, 10);
+
+        displayOrders.forEach(order => {
+            // --- DEBUGGING LOGS ---
+            console.log(`--- Processing Order ID: ${order.order_id} ---`);
+            console.log(`  Initial Order Status: ${order.status}`);
+            if (order.picked_batches) {
+                order.picked_batches.forEach(pick => {
+                    console.log(`    Pick ID: ${pick.pick_id}, Batch: ${pick.batch_number}, Qty: ${pick.quantity_picked}, Pick Status: ${pick.status}`);
+                });
+            } else {
+                console.log('    No picked_batches found for this order.');
+            }
+            // --- END DEBUGGING LOGS ---
+
+            const itemSummary = order.items.map(item => `${item.product_name} (x${item.quantity})`).join(', ');
+
+            let displayStatus = order.status; // Default to the order's main status
+
+            // If the order is pending, check the pick progress for more granular status
+            if (order.status === 'Pending' && order.picked_batches && order.picked_batches.length > 0) {
+                const totalPicks = order.picked_batches.length;
+                const pickedCount = order.picked_batches.filter(pick => pick.status === 'Picked' || pick.status === 'Dispatched').length;
+                const pendingPickCount = order.picked_batches.filter(pick => pick.status === 'Pending Pick').length;
+
+                console.log(`  Picking progress for Order ${order.order_id}: picked=${pickedCount}, pending=${pendingPickCount}, total=${totalPicks}`);
+
+
+                if (pickedCount === totalPicks) {
+                    displayStatus = 'All Items Picked (Ready for Dispatch)';
+                    // The order's main status should have been updated to 'Completed' by updatePickStatus if all were picked
+                    // but this provides a fallback display
+                } else if (pickedCount > 0) {
+                    displayStatus = `Partially Picked (${pickedCount}/${totalPicks})`;
+                } else if (pendingPickCount === totalPicks) {
+                    displayStatus = 'Pending Pick'; // All items still need picking
+                }
+            } else if (order.status === 'Completed') { // Explicitly handle 'Completed' status from backend
+                 displayStatus = 'All Items Picked (Ready for Dispatch)';
+            }
+
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4">${order.order_id}</td>
+                <td class="px-6 py-4">${formatDateToYYYYMMDD(order.order_date)}</td>
+                <td class="px-6 py-4">${displayStatus}</td>
+                <td class="px-6 py-4 text-sm">${itemSummary}</td>
+            `;
+            recentOrdersTableBody.appendChild(row);
+        });
+    }
+    function renderRecentOrdersTable(orders) {
+        const recentOrdersTableBody = document.getElementById('recentOrdersTableBody');
+        recentOrdersTableBody.innerHTML = '';
+        if (orders.length === 0) {
+            recentOrdersTableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">No recent orders.</td></tr>';
+            return;
+        }
+
+        // Sort orders by order_date in descending order (most recent first)
+        orders.sort((a, b) => new Date(b.order_date) - new Date(a.order_date));
+
+        // Display only the last 10 orders for brevity
+        const displayOrders = orders.slice(0, 10);
+
+        displayOrders.forEach(order => {
+            const itemSummary = order.items.map(item => `${item.product_name} (x${item.quantity})`).join(', ');
+
+            let displayStatus = order.status; // Default to the order's main status
+
+            // If the order is pending, check the pick progress for more granular status
+            if (order.status === 'Pending' && order.picked_batches && order.picked_batches.length > 0) {
+                const totalPicks = order.picked_batches.length;
+                const pickedCount = order.picked_batches.filter(pick => pick.status === 'Picked' || pick.status === 'Dispatched').length;
+                const pendingPickCount = order.picked_batches.filter(pick => pick.status === 'Pending Pick').length;
+
+                if (pickedCount === totalPicks) {
+                    displayStatus = 'All Items Picked (Ready for Dispatch)';
+                    // Optionally add a color class for "ready for dispatch" status
+                    // row.classList.add('bg-green-100');
+                } else if (pickedCount > 0) {
+                    displayStatus = `Partially Picked (${pickedCount}/${totalPicks})`;
+                    // Optionally add a color class for "partially picked" status
+                    // row.classList.add('bg-yellow-100');
+                } else if (pendingPickCount === totalPicks) {
+                    displayStatus = 'Pending Pick'; // All items still need picking
+                }
+            }
+
+
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4">${order.order_id}</td>
+                <td class="px-6 py-4">${formatDateToYYYYMMDD(order.order_date)}</td>
+                <td class="px-6 py-4">${displayStatus}</td>
+                <td class="px-6 py-4 text-sm">${itemSummary}</td>
+            `;
+            recentOrdersTableBody.appendChild(row);
+        });
+    }
+    function renderRecentOrdersTable(orders) {
+        const recentOrdersTableBody = document.getElementById('recentOrdersTableBody');
+        recentOrdersTableBody.innerHTML = '';
+        if (orders.length === 0) {
+            recentOrdersTableBody.innerHTML = '<tr><td colspan="4" class="px-6 py-4 text-center text-gray-500">No recent orders.</td></tr>';
+            return;
+        }
+
+        // Sort orders by order_date in descending order (most recent first)
+        orders.sort((a, b) => new Date(b.order_date) - new Date(a.order_date));
+
+        // Display only the last 10 orders for brevity
+        const displayOrders = orders.slice(0, 10);
+
+        displayOrders.forEach(order => {
+            const itemSummary = order.items.map(item => `${item.product_name} (x${item.quantity})`).join(', ');
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td class="px-6 py-4">${order.order_id}</td>
+                <td class="px-6 py-4">${formatDateToYYYYMMDD(order.order_date)}</td>
+                <td class="px-6 py-4">${order.status}</td>
+                <td class="px-6 py-4 text-sm">${itemSummary}</td>
+            `;
+            recentOrdersTableBody.appendChild(row);
+        });
+    }
+
+
+    // --- Inbound Stock Entry Functions ---
+    let availableProducts = [];
+    let availableLocations = []; // For dropdown and temp logging
+
+    async function loadProductsForInbound() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/products`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            availableProducts = await response.json();
+            const productNameSelect = document.getElementById('productName');
+            productNameSelect.innerHTML = '<option value="">Select Product</option>'; // Clear and add default
+            availableProducts.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.product_id;
+                option.innerText = product.name;
+                productNameSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error loading products for inbound:', error);
+            showModal('Failed to load products for inbound entry.', 'error');
+        }
+    }
+
+    async function loadStorageLocationsForInbound() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/storage_locations`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            availableLocations = await response.json();
+
+            // Always populate for temperature logging dropdown
+            const tempLocationSelect = document.getElementById('tempLocation');
+            if (tempLocationSelect) {
+                tempLocationSelect.innerHTML = '<option value="">Select Location</option>';
+                availableLocations.forEach(location => {
+                    const option = document.createElement('option');
+                    option.value = location.location_id;
+                    option.innerText = `${location.zone}-${location.rack}-${location.slot} (ID: ${location.location_id})`;
+                    tempLocationSelect.appendChild(option);
+                });
+            }
+
+        } catch (error) {
+            console.error('Error loading storage locations for inbound (temp log dropdown):', error);
+            // This specific error might not need a modal as it's only for the temp log dropdown
+            // showModal('Failed to load storage locations for inbound entry. Please ensure your database schema is up to date (specifically storage_locations table).', 'error');
+        }
+    }
+
+    // Barcode Generation Function (for inbound form)
+    function generateAndDisplayBarcode(batchId, barcodeString) {
+        const barcodeDisplayContainer = document.getElementById('barcodeDisplayContainer');
+        const batchBarcodeSvg = document.getElementById('batchBarcode');
+        const barcodeInfo = document.getElementById('barcodeInfo');
+
+        try {
+            JsBarcode("#batchBarcode", barcodeString, {
+                format: "CODE128", // Common barcode format
+                displayValue: true,
+                height: 80,
+                width: 2,
+                margin: 10
+            });
+            barcodeInfo.innerText = `Batch ID: ${batchId}, Barcode: ${barcodeString}`;
+            barcodeDisplayContainer.classList.remove('hidden');
+        } catch (e) {
+            console.error("Error generating barcode:", e);
+            barcodeInfo.innerText = "Error generating barcode. Please check batch number format.";
+            barcodeDisplayContainer.classList.remove('hidden');
+        }
+    }
+
+    function printBarcode() {
+        const barcodeSection = document.getElementById('barcodeDisplayContainer');
+        if (barcodeSection) {
+            const printWindow = window.open('', '_blank', 'height=400,width=600');
+            printWindow.document.write('<html><head><title>Print Barcode</title>');
+            printWindow.document.write('</head><body>');
+            printWindow.document.write('<div style="text-align: center;">');
+            // Clone the SVG to ensure it prints correctly
+            const clonedSvg = document.getElementById('batchBarcode').cloneNode(true);
+            printWindow.document.body.appendChild(clonedSvg);
+            printWindow.document.write('</div>');
+            printWindow.document.close();
+            printWindow.print();
+        }
+    }
+
+
+    const inboundForm = document.getElementById('inboundForm');
+    inboundForm.addEventListener('submit', async e => {
+        e.preventDefault();
+
+        const productId = document.getElementById('productName').value;
+        const batchNumber = document.getElementById('batchNumber').value.trim();
+        const manufactureDateInput = document.getElementById('manufactureDate').value;
+        const expiryDateInput = document.getElementById('expiryDate').value;
+        const quantity = parseInt(document.getElementById('quantity').value);
+        const storageLocationId = undefined; // Always undefined for smart allocation now
+
+        if (!productId || !batchNumber || !expiryDateInput || !quantity) {
+            showModal('Please fill all required fields (Product, Batch Number, Expiry Date, Quantity).', 'error');
+            return;
+        }
+
+        // Format dates toYYYY-MM-DD
+        const manufactureDate = manufactureDateInput ? formatDateToYYYYMMDD(manufactureDateInput) : null;
+        const expiryDate = expiryDateInput ? formatDateToYYYYMMDD(expiryDateInput) : null;
+
+        try {
+            const batchData = {
+                product_id: productId,
+                batch_number: batchNumber,
+                manufacture_date: manufactureDate,
+                expiry_date: expiryDate,
+                quantity: quantity,
+                barcode: batchNumber, // Using batch number as barcode for simplicity
+                storageLocationId: storageLocationId // This will always be undefined
+            };
+
+            const batchResponse = await fetch(`${API_BASE_URL}/batches`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(batchData)
+            });
+
+            if (!batchResponse.ok) {
+                const errorData = await batchResponse.json();
+                throw new Error(errorData.error || `HTTP error! status: ${batchResponse.status}`);
+            }
+
+            const result = await batchResponse.json();
+            const assignedLocationMsg = result.assigned_location_id ? `Assigned to Location ID: ${result.assigned_location_id}.` : 'Smart allocated.';
+            showModal(`Stock added successfully! Batch ID: ${result.batch.batch_id}. ${assignedLocationMsg}`, 'info');
+
+            generateAndDisplayBarcode(result.batch.batch_id, result.batch.barcode);
+
+            inboundForm.reset();
+            loadDashboardData(); // Refresh dashboard
+            loadStorageLocationsForInbound(); // Refresh locations for updated occupancy and temp logging dropdown
+        } catch (error) {
+            console.error('Error adding stock:', error);
+            showModal(`Failed to add stock: ${error.message}`, 'error');
+        }
+    });
+
+    // --- Add New Product Functions ---
+    const newProductForm = document.getElementById('newProductForm');
+    newProductForm.addEventListener('submit', async e => {
+        e.preventDefault();
+
+        const name = document.getElementById('newProductName').value.trim();
+        const description = document.getElementById('newProductDescription').value.trim();
+        const manufacturer = document.getElementById('newProductManufacturer').value.trim();
+        const category = document.getElementById('newProductCategory').value;
+        const price = parseFloat(document.getElementById('newProductPrice').value);
+
+        if (!name) {
+            showModal('Product Name is required.', 'error');
+            return;
+        }
+
+        try {
+            const productData = {
+                name,
+                description: description || null,
+                manufacturer: manufacturer || null,
+                category: category, // Category is now restricted to Ambient/Cold Storage in HTML
+                price: isNaN(price) ? null : price
+            };
+
+            const response = await fetch(`${API_BASE_URL}/products`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(productData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            showModal('New Product Type added successfully!', 'info');
+            newProductForm.reset(); // Clear the form
+            loadProductsForInbound(); // Reload products dropdown in Inbound section
+            loadProductsForOrder(); // Reload products dropdown in Order section
+        } catch (error) {
+            console.error('Error adding new product:', error);
+            showModal(`Failed to add new product: ${error.message}`, 'error');
+        }
+    });
+
+    // --- NEW: Manage Locations Functions ---
+    const addLocationForm = document.getElementById('addLocationForm');
+    const locationTypeSelect = document.getElementById('locationType');
+    const temperatureFieldsDiv = document.getElementById('temperatureFields');
+    const minTempInput = document.getElementById('minTemp');
+    const maxTempInput = document.getElementById('maxTemp');
+
+
+    // Toggle visibility of temperature fields based on location type
+    function toggleTempFields() {
+        if (locationTypeSelect.value === 'Cold Storage') {
+            temperatureFieldsDiv.classList.remove('hidden');
+            minTempInput.setAttribute('required', 'required');
+            maxTempInput.setAttribute('required', 'required');
+        } else {
+            temperatureFieldsDiv.classList.add('hidden');
+            minTempInput.removeAttribute('required');
+            maxTempInput.removeAttribute('required');
+            minTempInput.value = ''; // Clear values when hidden
+            maxTempInput.value = '';
+        }
+    }
+
+    // Listen for changes on the location type select
+    locationTypeSelect.addEventListener('change', toggleTempFields);
+
+    // Form submission for adding new location
+    addLocationForm.addEventListener('submit', async e => {
+        e.preventDefault();
+
+        const zone = document.getElementById('locationZone').value.trim();
+        const rack = document.getElementById('locationRack').value.trim();
+        const slot = document.getElementById('locationSlot').value.trim();
+        const location_type = document.getElementById('locationType').value;
+        const size_type = document.getElementById('locationSizeType').value.trim();
+        const capacity = parseInt(document.getElementById('locationCapacity').value);
+        let min_temp = null;
+        let max_temp = null;
+
+        if (location_type === 'Cold Storage') {
+            min_temp = parseFloat(minTempInput.value);
+            max_temp = parseFloat(maxTempInput.value);
+            if (isNaN(min_temp) || isNaN(max_temp)) {
+                showModal('Please enter valid Min/Max Temperatures for Cold Storage.', 'error');
+                return;
+            }
+        }
+
+        if (!zone || !rack || !slot || !location_type || isNaN(capacity) || capacity <= 0) { // Added isNaN(capacity) check
+            showModal('Please fill all required fields (Zone, Rack, Slot, Type, and a valid positive Capacity).', 'error');
+            return;
+        }
+
+        try {
+            const locationData = {
+                zone,
+                rack,
+                slot,
+                location_type,
+                size_type: size_type || null,
+                capacity,
+                current_occupancy: 0, // Always start with 0 occupancy for new locations
+                min_temp: min_temp,
+                max_temp: max_temp
+            };
+
+            const response = await fetch(`${API_BASE_URL}/storage_locations`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(locationData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            showModal('New Storage Location added successfully!', 'info');
+            addLocationForm.reset(); // Clear the form
+            toggleTempFields(); // Reset visibility after form clear
+            loadStorageMapData(); // Refresh storage map to show new location
+            loadStorageLocationsForInbound(); // Refresh location dropdowns for temp log
+        } catch (error) {
+            console.error('Error adding new location:', error);
+            showModal(`Failed to add new location: ${error.message}`, 'error');
+        }
+    });
+
+
+    // --- Storage Map Functions ---
+    async function loadStorageMapData() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/storage_locations`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const locations = await response.json();
+            renderStorageMap(locations);
+        } catch (error) {
+            console.error('Error fetching storage map data:', error);
+            showModal('Failed to load storage map data. Please check the backend server and database schema.', 'error');
+        }
+    }
+
+    function renderStorageMap(locations) {
+        const rackGrid = document.getElementById('rackGrid');
+        rackGrid.innerHTML = ''; // Clear existing racks
+
+        // Separate locations into Cold Storage and Ambient
+        const coldStorageLocations = locations.filter(loc => loc.location_type === 'Cold Storage');
+        const ambientLocations = locations.filter(loc => loc.location_type === 'Ambient');
+
+        // Render Cold Storage section
+        if (coldStorageLocations.length > 0) {
+            const coldHeader = document.createElement('h3');
+            coldHeader.className = 'text-xl font-semibold mb-3 mt-6 text-gray-800 col-span-full';
+            coldHeader.innerText = '❄️ Cold Storage Racks';
+            rackGrid.appendChild(coldHeader);
+            coldStorageLocations.forEach(loc => rackGrid.appendChild(createRackDiv(loc)));
+        }
+
+        // Render Ambient Storage section
+        if (ambientLocations.length > 0) {
+            const ambientHeader = document.createElement('h3');
+            ambientHeader.className = 'text-xl font-semibold mb-3 mt-6 text-gray-800 col-span-full';
+            ambientHeader.innerText = '☀️ Ambient Storage Racks (Normal)';
+            rackGrid.appendChild(ambientHeader);
+            ambientLocations.forEach(loc => rackGrid.appendChild(createRackDiv(loc)));
+        }
+
+        if (locations.length === 0) {
+            const noData = document.createElement('p');
+            noData.className = 'col-span-full text-center text-gray-500 mt-4';
+            noData.innerText = 'No storage locations found. Please add some locations using the "Manage Locations" page.';
+            rackGrid.appendChild(noData);
+        }
+    }
+
+    function createRackDiv(currentLoc) {
+        const rackDiv = document.createElement('div');
+        rackDiv.className = 'border rounded-lg p-4 text-center cursor-pointer hover:shadow-md transition duration-150 ease-in-out shadow-sm flex flex-col justify-between';
+
+        let contentText = '';
+        // Use current_occupancy directly from location object, which is updated by backend
+        let totalAssignedQty = currentLoc.current_occupancy;
+        let occupancyPercentage = (totalAssignedQty / currentLoc.capacity) * 100;
+
+        let bgColorClass = 'bg-gray-50'; // Default empty
+        if (occupancyPercentage > 90) bgColorClass = 'bg-red-200 hover:bg-red-300';
+        else if (occupancyPercentage > 70) bgColorClass = 'bg-orange-200 hover:bg-orange-300'; // Added orange for nearing full
+        else if (occupancyPercentage > 50) bgColorClass = 'bg-yellow-100 hover:bg-yellow-200';
+        else if (occupancyPercentage > 0) bgColorClass = 'bg-green-100 hover:bg-green-200';
+        else bgColorClass = 'bg-gray-50 hover:bg-gray-100'; // Empty or 0%
+
+        rackDiv.classList.add(...bgColorClass.split(' '));
+
+        if (currentLoc.contents && currentLoc.contents.length > 0) {
+            // Display unique product names and total quantity for each product within this location
+            const productSummary = {};
+            currentLoc.contents.forEach(item => {
+                // FIX: Use item.assigned_quantity as returned by backend for batches within storage_locations
+                productSummary[item.product_name] = (productSummary[item.product_name] || 0) + item.assigned_quantity;
+            });
+            contentText = Object.entries(productSummary).map(([name, qty]) => `${name} (${qty})`).join(', ');
+
+        } else {
+            contentText = 'Empty';
+        }
+
+        let tempStatus = '';
+        if (currentLoc.location_type === 'Cold Storage' && currentLoc.min_temp !== null && currentLoc.max_temp !== null) {
+            const temp = currentLoc.latest_temperature;
+            if (temp === null) {
+                tempStatus = `<span class="text-yellow-600">No Temp Data</span>`;
+            } else if (temp < currentLoc.min_temp || temp > currentLoc.max_temp) {
+                tempStatus = `<span class="text-red-600">Temp: ${temp}°C (Alert!)</span>`;
+            } else {
+                tempStatus = `<span class="text-green-600">Temp: ${temp}°C (OK)</span>`;
+            }
+        }
+
+        rackDiv.innerHTML = `
+            <p class="font-semibold text-gray-800">${currentLoc.zone} ${currentLoc.rack}-${currentLoc.slot}</p>
+            <p class="text-sm text-gray-600">Type: ${currentLoc.location_type || 'N/A'}, Size: ${currentLoc.size_type || 'N/A'}</p>
+            <p class="text-sm mt-2 text-gray-700 rack-content">${contentText}</p>
+            <p class="text-xs text-gray-500 mt-1 capacity-info">Occupied: ${totalAssignedQty} / ${currentLoc.capacity}</p>
+            ${tempStatus ? `<p class="text-xs mt-1">${tempStatus}</p>` : ''}
+        `;
+
+        rackDiv.addEventListener('click', () => {
+            let detailMessage = `Location ID: ${currentLoc.location_id}\n`;
+            detailMessage += `Zone: ${currentLoc.zone}, Rack: ${currentLoc.rack}, Slot: ${currentLoc.slot}\n`;
+            detailMessage += `Type: ${currentLoc.location_type || 'N/A'}, Size: ${currentLoc.size_type || 'N/A'}\n`;
+            detailMessage += `Capacity: ${currentLoc.capacity}, Current Occupancy: ${totalAssignedQty}\n`;
+            if (currentLoc.min_temp !== null && currentLoc.max_temp !== null) {
+                detailMessage += `Temperature Range: ${currentLoc.min_temp}°C - ${currentLoc.max_temp}°C\n`;
+                detailMessage += `Latest Reading: ${currentLoc.latest_temperature !== null ? currentLoc.latest_temperature + '°C' : 'N/A'}\n`;
+            }
+            detailMessage += `\nContents:\n`;
+            if (currentLoc.contents && currentLoc.contents.length > 0) {
+                currentLoc.contents.forEach(item => {
+                    // FIX: Display assigned_quantity in the modal as well
+                    detailMessage += `- ${item.product_name} (Batch: ${item.batch_number}, Qty: ${item.assigned_quantity}, Expiry: ${item.expiry_date ? formatDateToYYYYMMDD(item.expiry_date) : 'N/A'})\n`;
+                });
+            } else {
+                detailMessage += 'Empty';
+            }
+            showModal(detailMessage, 'info');
+        });
+        return rackDiv;
+    }
+
+    // --- Create Order Functions ---
+    let orderItemCounter = 1; // To manage unique IDs for order item rows
+
+    async function loadProductsForOrder() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/products`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            availableProducts = await response.json(); // Reuse availableProducts
+            updateProductSelects();
+        } catch (error) {
+            console.error('Error loading products for order:', error);
+            showModal('Failed to load products for order creation.', 'error');
+        }
+    }
+
+    function updateProductSelects() {
+        document.querySelectorAll('.product-select').forEach(selectElement => {
+            const currentValue = selectElement.value; // Preserve selected value if any
+            selectElement.innerHTML = '<option value="">Select Product</option>';
+            availableProducts.forEach(product => {
+                const option = document.createElement('option');
+                option.value = product.product_id;
+                option.innerText = product.name;
+                selectElement.appendChild(option);
+            });
+            selectElement.value = currentValue; // Restore value
+        });
+    }
+
+    function addOrderItemRow() {
+        orderItemCounter++;
+        const orderItemsContainer = document.getElementById('orderItemsContainer');
+        const newOrderItemDiv = document.createElement('div');
+        newOrderItemDiv.className = 'order-item flex flex-col sm:flex-row gap-2 items-end';
+        newOrderItemDiv.innerHTML = `
+            <div class="flex-grow">
+                <label for="orderProduct${orderItemCounter}" class="block font-semibold mb-1 text-gray-700">Product</label>
+                <select id="orderProduct${orderItemCounter}" class="w-full border border-gray-300 px-3 py-2 rounded-md product-select" required>
+                    <option value="">Select Product</option>
+                </select>
+            </div>
+            <div>
+                <label for="orderQuantity${orderItemCounter}" class="block font-semibold mb-1 text-gray-700">Quantity</label>
+                <input type="number" id="orderQuantity${orderItemCounter}" min="1" required class="w-full border border-gray-300 px-3 py-2 rounded-md quantity-input"/>
+            </div>
+            <button type="button" class="bg-red-500 text-white px-3 py-2 rounded-md hover:bg-red-600 remove-item-btn">Remove</button>
+        `;
+        orderItemsContainer.appendChild(newOrderItemDiv);
+
+        // Populate the new product select with available products
+        const newProductSelect = newOrderItemDiv.querySelector('.product-select');
+        availableProducts.forEach(product => {
+            const option = document.createElement('option');
+            option.value = product.product_id;
+            option.innerText = product.name;
+            newProductSelect.appendChild(option);
+        });
+
+        // Add event listener for remove button
+        newOrderItemDiv.querySelector('.remove-item-btn').addEventListener('click', () => {
+            newOrderItemDiv.remove();
+        });
+    }
+
+    document.getElementById('addOrderItemBtn').addEventListener('click', addOrderItemRow);
+
+    const orderForm = document.getElementById('orderForm');
+    orderForm.addEventListener('submit', async e => {
+        e.preventDefault();
+
+        const orderItems = [];
+        document.querySelectorAll('.order-item').forEach(itemDiv => {
+            const productId = itemDiv.querySelector('.product-select').value;
+            const quantity = parseInt(itemDiv.querySelector('.quantity-input').value);
+
+            if (productId && quantity > 0) {
+                orderItems.push({ product_id: parseInt(productId), quantity: quantity });
+            }
+        });
+
+        if (orderItems.length === 0) {
+            showModal('Please add at least one item to the order with a valid quantity.', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/orders`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ items: orderItems })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            const result = await response.json();
+            showModal(`Order placed successfully! Order ID: ${result.order.order_id}`, 'info');
+            orderForm.reset();
+            // Clear all but the first item row
+            const orderItemsContainer = document.getElementById('orderItemsContainer');
+            while (orderItemsContainer.children.length > 1) {
+                orderItemsContainer.removeChild(orderItemsContainer.lastChild);
+            }
+            orderItemCounter = 1; // Reset counter
+            loadDashboardData(); // Refresh dashboard to reflect quantity changes
+            loadPickListData(); // Refresh pick list
+            loadRecentOrders(); // Refresh recent orders on dashboard
+        } catch (error) {
+            console.error('Error placing order:', error);
+            showModal(`Failed to place order: ${error.message}`, 'error');
+        }
+    });
+
+    // --- Pick List Functions ---
+    let currentPickListOrders = [];
+
+    async function loadPickListData() {
+        try {
+            const response = await fetch(`${API_BASE_URL}/orders`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const orders = await response.json();
+            // Filter for orders that are 'Pending' and have at least one 'Pending Pick' item
+            currentPickListOrders = orders.filter(order =>
+                order.status === 'Pending' &&
+                order.picked_batches &&
+                order.picked_batches.some(pick => pick.status === 'Pending Pick')
+            );
+            renderPickList(currentPickListOrders);
+        } catch (error) {
+            console.error('Error fetching pick list data:', error);
+            showModal('Failed to load pick list data. Please check the backend server and database schema.', 'error');
+        }
+    }
+
+    async function getBatchLocation(pickItem) { // Modified to accept pickItem object directly
+        // The pickItem object (from order.picked_batches) now directly contains location details
+        // as fetched by the backend's /orders endpoint (sl.zone, sl.rack, sl.slot, sl.size_type)
+        if (pickItem.zone && pickItem.rack && pickItem.slot) {
+            return `Zone: ${pickItem.zone}, Rack: ${pickItem.rack}, Slot: ${pickItem.slot} (Size: ${pickItem.size_type})`;
+        }
+        return 'Not Assigned'; // Fallback if location data is missing
+    }
+
+    async function renderPickList(orders) {
+        const pickListBody = document.getElementById('pickListBody');
+        pickListBody.innerHTML = ''; // Clear existing rows
+
+        if (orders.length === 0) {
+            pickListBody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">No pending orders to pick.</td></tr>';
+            return;
+        }
+
+        // Filter orders to only show those with pending picks
+        const ordersWithPendingPicks = orders.filter(order =>
+            order.picked_batches && order.picked_batches.some(pick => pick.status === 'Pending Pick')
+        );
+
+        if (ordersWithPendingPicks.length === 0) {
+            pickListBody.innerHTML = '<tr><td colspan="7" class="px-6 py-4 text-center text-gray-500">No pending orders to pick.</td></tr>';
+            return;
+        }
+
+
+        for (const order of ordersWithPendingPicks) { // Loop through filtered orders
+            if (order.picked_batches && order.picked_batches.length > 0) {
+                for (const pick of order.picked_batches) {
+                    // Only show pending picks in the list
+                    if (pick.status !== 'Pending Pick') continue;
+
+                    const locationText = await getBatchLocation(pick);
+
+                    const row = document.createElement('tr');
+                    row.setAttribute('data-pick-id', pick.pick_id);
+                    row.setAttribute('data-order-id', order.order_id);
+                    row.setAttribute('data-barcode', pick.barcode || '');
+
+                    row.innerHTML = `
+                        <td class="px-6 py-4">${order.order_id}</td>
+                        <td class="px-6 py-4">${pick.product_name || 'N/A'}</td>
+                        <td class="px-6 py-4">${pick.batch_number || 'N/A'}</td>
+                        <td class="px-6 py-4">${pick.quantity_picked}</td>
+                        <td class="px-6 py-4">${locationText}</td>
+                        <td class="px-6 py-4 pick-status-cell">${pick.status}</td>
+                        <td class="px-6 py-4">
+                            <button data-pick-id="${pick.pick_id}" data-order-id="${order.order_id}" class="mark-picked-item-btn bg-yellow-500 text-white px-3 py-1 rounded-md text-sm hover:bg-yellow-600 transition duration-150 ease-in-out">Mark Picked</button>
+                        </td>
+                    `;
+                    pickListBody.appendChild(row);
+                }
+            }
+        }
+
+        // IMPORTANT: Attach event listeners AFTER all rows are added to the DOM
+        document.querySelectorAll('.mark-picked-item-btn').forEach(button => {
+            button.addEventListener('click', async (e) => {
+                const pickId = e.target.getAttribute('data-pick-id');
+                const orderId = e.target.getAttribute('data-order-id');
+                showModal(`Mark this item as 'Picked' for Order ${orderId}?`, 'confirm', async () => {
+                    await updatePickStatus(pickId, orderId, 'Picked'); // Pass the literal string 'Picked'
+                });
+            });
+        });
+    }
+
+    async function updatePickStatus(pickId, orderId, status) {
+        console.log(`Attempting to update pickId: ${pickId}, orderId: ${orderId} to status: "${status}"`); // Debug log
+        const payload = JSON.stringify({ status: status });
+        console.log('Sending payload:', payload); // Crucial debugging log: what JSON string is being sent
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/order_batch_picks/${pickId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: payload // Use the explicitly logged payload
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                console.error('Backend error response:', errorData); // Log backend's specific error
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            showModal(`Item ${pickId} marked as '${status}'!`, 'info');
+
+            if (status === 'Picked') {
+                const orderResponse = await fetch(`${API_BASE_URL}/orders`, { cache: 'no-store' }); // Ensure fresh order data
+                if (!orderResponse.ok) {
+                    throw new Error(`Failed to fetch orders for status check: ${orderResponse.status}`);
+                }
+                const allOrders = await orderResponse.json();
+                const currentOrder = allOrders.find(o => o.order_id == orderId);
+
+                if (currentOrder && currentOrder.picked_batches) {
+                    const allPicksForOrderArePicked = currentOrder.picked_batches.every(
+                        pick => pick.status === 'Picked' || pick.status === 'Dispatched'
+                    );
+
+                    if (allPicksForOrderArePicked && currentOrder.status === 'Pending') {
+                        const updateOrderRes = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ status: 'Completed' })
+                        });
+                        if (!updateOrderRes.ok) {
+                            const errorData = await updateOrderRes.json();
+                            console.error('Error updating parent order status to Completed:', errorData.error);
+                        } else {
+                            console.log(`Order ${orderId} status updated to 'Completed' as all items are picked.`);
+                        }
+                    }
+                }
+            }
+
+            loadPickListData(); // Re-load pick list (will hide picked item)
+            loadDashboardData(); // Refresh dashboard (implicitly calls loadRecentOrders)
+            loadRecentOrders(); // Ensure recent orders are refreshed for status update
+        } catch (error) {
+            console.error(`Error updating pick status for ${pickId}:`, error);
+            showModal(`Failed to update pick status: ${error.message}`, 'error');
+        }
+    }
+
+
+    // Barcode Scanning and Verification
+    const barcodeScannerInput = document.getElementById('barcodeScannerInput');
+    const verifyBarcodeBtn = document.getElementById('verifyBarcodeBtn');
+    const barcodeVerificationResult = document.getElementById('barcodeVerificationResult');
+
+    async function verifyBarcode() {
+        const barcode = barcodeScannerInput.value.trim();
+        if (!barcode) {
+            barcodeVerificationResult.innerHTML = '<span class="text-red-500">Please enter a barcode to scan.</span>';
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/verify-barcode/${barcode}`);
+            const data = await response.json();
+
+            if (response.ok && data.isValid) {
+                barcodeVerificationResult.innerHTML = `<p class="text-green-600 font-semibold">Barcode Valid! Batch: ${data.batch.batch_number}, Product: ${data.batch.product_name}.</p>`;
+                if (data.messages.length > 0) {
+                    barcodeVerificationResult.innerHTML += `<p class="text-gray-700">${data.messages.join('<br>')}</p>`;
+                }
+
+                // Highlight the row in the pick list if it matches
+                const matchingRow = document.querySelector(`tr[data-barcode="${barcode}"]`);
+                if (matchingRow) {
+                    matchingRow.classList.add('bg-blue-100', 'font-semibold');
+                    // Find the pick_id from the row and show a specific action for it
+                    const pickId = matchingRow.getAttribute('data-pick-id');
+                    if (pickId && matchingRow.querySelector('.mark-picked-item-btn')) {
+                        matchingRow.querySelector('.mark-picked-item-btn').style.display = 'inline-block'; // Show the button
+                        // Optionally auto-click or suggest picking
+                        // showModal(`Batch ${barcode} matched. Ready to mark as picked?`, 'confirm', () => updatePickStatus(pickId, 'Picked'));
+                    }
+                }
+
+            } else {
+                let messages = data.messages.join('<br>') || 'Unknown verification error.';
+                barcodeVerificationResult.innerHTML = `<p class="text-red-600 font-semibold">Barcode Invalid!</p><p class="text-gray-700">${messages}</p>`;
+            }
+        } catch (error) {
+            console.error('Error during barcode verification:', error);
+            barcodeVerificationResult.innerHTML = `<p class="text-red-600 font-semibold">Error verifying barcode: ${error.message}</p>`;
+        }
+    }
+
+    barcodeScannerInput.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault(); // Prevent form submission if input is part of a form
+            verifyBarcode();
+        }
+    });
+
+    verifyBarcodeBtn.addEventListener('click', verifyBarcode);
+
+
+    // Mark all orders as Dispatched (This now dispatches only orders where all items are 'Picked')
+    document.getElementById('markAllDispatchedBtn').addEventListener('click', async () => {
+        // --- NEW LOGIC: Fetch ALL orders directly to ensure fresh status ---
+        let allOrdersResponse;
+        try {
+            allOrdersResponse = await fetch(`${API_BASE_URL}/orders`, { cache: 'no-store' }); // Force fresh data
+            if (!allOrdersResponse.ok) {
+                throw new Error(`HTTP error! status: ${allOrdersResponse.status}`);
+            }
+        } catch (error) {
+            console.error('Error fetching orders for dispatch check:', error);
+            showModal('Failed to load order data for dispatch. Please try again.', 'error');
+            return;
+        }
+        const allOrdersFromDb = await allOrdersResponse.json();
+
+        // Filter orders that have all their related picks marked as 'Picked' or 'Dispatched'
+        // AND whose main order status is 'Completed' (which our updatePickStatus sets)
+        // OR whose main order status is 'Pending' but all picks are indeed picked (as a fallback/robustness)
+        const ordersToDispatch = allOrdersFromDb.filter(order =>
+            (order.status === 'Completed' || // Orders whose main status is already 'Completed'
+             (order.status === 'Pending' && // Or pending, but all individual picks are done
+              order.picked_batches &&
+              order.picked_batches.length > 0 && // Ensure it has picks
+              order.picked_batches.every(pick => pick.status === 'Picked' || pick.status === 'Dispatched')))
+        );
+
+        console.log("Orders eligible for dispatch:", ordersToDispatch.map(o => o.order_id)); // Debug log
+
+        if (ordersToDispatch.length === 0) {
+            showModal('No orders with all items picked are ready for dispatch.', 'info');
+            return;
+        }
+
+        showModal(`Are you sure you want to mark ${ordersToDispatch.length} order(s) as DISPATCHED?`, 'confirm', async () => {
+            try {
+                for (const order of ordersToDispatch) {
+                    console.log(`Attempting to dispatch Order ID: ${order.order_id}`);
+                    // 1. Create dispatch record
+                    const dispatchResponse = await fetch(`${API_BASE_URL}/dispatches`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            order_id: order.order_id,
+                            dispatched_by: 'Warehouse Manager', // Hardcoded for now
+                            dispatch_date: formatDateToYYYYMMDD(new Date())
+                        })
+                    });
+
+                    if (!dispatchResponse.ok) {
+                        const errorData = await dispatchResponse.json();
+                        // If dispatch record already exists (due to unique constraint), it's okay, just log and continue
+                        if (errorData.error && errorData.error.includes('ER_DUP_ENTRY')) {
+                            console.warn(`Dispatch record for Order ${order.order_id} already exists. Skipping creation.`);
+                        } else {
+                            throw new Error(errorData.error || `HTTP error! status: ${dispatchResponse.status} during dispatch record creation for order ${order.order_id}`);
+                        }
+                    }
+
+                    // 2. Update main order status to 'Dispatched'
+                    const updateOrderResponse = await fetch(`${API_BASE_URL}/orders/${order.order_id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ status: 'Dispatched' })
+                    });
+
+                    if (!updateOrderResponse.ok) {
+                        const errorData = await updateOrderResponse.json();
+                        throw new Error(errorData.error || `HTTP error! status: ${updateOrderResponse.status} during main order status update for order ${order.order_id}`);
+                    }
+
+                    // 3. Update all associated pick statuses to 'Dispatched' if they are 'Picked'
+                    // This is primarily for consistency, as the main order status will already be 'Dispatched'
+                    for (const pick of order.picked_batches || []) { // Ensure pick.picked_batches is not null
+                        if (pick.status === 'Picked') { // Only update if already picked
+                            const updatePickRes = await fetch(`${API_BASE_URL}/order_batch_picks/${pick.pick_id}`, {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ status: 'Dispatched' })
+                            });
+                             if (!updatePickRes.ok) {
+                                const errorData = await updatePickRes.json();
+                                console.error(`Error updating pick ${pick.pick_id} to Dispatched:`, errorData.error);
+                            }
+                        }
+                    }
+                     console.log(`Successfully dispatched Order ID: ${order.order_id}`);
+                }
+                showModal('Selected orders marked as dispatched!', 'info');
+                loadPickListData(); // Final refresh of lists
+                loadDashboardData();
+                loadRecentOrders();
+                loadAlertsData();
+            } catch (error) {
+                console.error('Error dispatching all orders:', error);
+                showModal(`Failed to dispatch orders: ${error.message}`, 'error');
+            }
+        });
+    });
+
+
+    // --- Alerts Functions ---
+
+    // Simulate Temperature Logging
+    document.getElementById('logTempBtn').addEventListener('click', async () => {
+        const locationId = document.getElementById('tempLocation').value;
+        const tempReading = parseFloat(document.getElementById('tempReading').value);
+
+        if (!locationId || isNaN(tempReading)) {
+            showModal('Please select a location and enter a valid temperature.', 'error');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_BASE_URL}/temperature_logs`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ location_id: parseInt(locationId), temperature_reading: tempReading })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+            }
+
+            showModal('Temperature logged successfully!', 'info');
+            document.getElementById('tempReading').value = ''; // Clear input
+            loadAlertsData(); // Refresh alerts to show any new temperature alerts
+            loadStorageMapData(); // Refresh storage map to update latest temperature display
+        } catch (error) {
+            console.error('Error logging temperature:', error);
+            showModal(`Failed to log temperature: ${error.message}`, 'error');
+        }
+    });
+
+    document.getElementById('refreshAlertsBtn').addEventListener('click', loadAlertsData);
+
+
+    async function loadAlertsData() {
+        const expiryAlertsList = document.getElementById('expiryAlertsList');
+        const stockAlertsList = document.getElementById('stockAlertsList');
+        const temperatureAlertsList = document.getElementById('temperatureAlertsList');
+
+        expiryAlertsList.innerHTML = '';
+        stockAlertsList.innerHTML = '';
+        temperatureAlertsList.innerHTML = '';
+
+        // Fetch Expiry Alerts
+        try {
+            const response = await fetch(`${API_BASE_URL}/alerts/expiry`);
+            if (!response.ok) throw new Error('Failed to fetch expiry alerts.');
+            const expiryAlerts = await response.json();
+
+            if (expiryAlerts.expired.length > 0) {
+                expiryAlerts.expired.forEach(batch => {
+                    const li = document.createElement('li');
+                    li.className = 'text-red-700 font-semibold';
+                    li.innerText = `Expired: ${batch.product_name} (Batch: ${batch.batch_number}) expired on ${formatDateToYYYYMMDD(batch.expiry_date)}. Quantity: ${batch.quantity}`;
+                    expiryAlertsList.appendChild(li);
+                });
+            }
+            if (expiryAlerts.expiringSoon.length > 0) {
+                expiryAlerts.expiringSoon.forEach(batch => {
+                    const li = document.createElement('li');
+                    li.className = 'text-orange-600';
+                    li.innerText = `Expiring Soon: ${batch.product_name} (Batch: ${batch.batch_number}) expires on ${formatDateToYYYYMMDD(batch.expiry_date)}. Quantity: ${batch.quantity}`;
+                    expiryAlertsList.appendChild(li);
+                });
+            }
+            if (expiryAlerts.expired.length === 0 && expiryAlerts.expiringSoon.length === 0) {
+                expiryAlertsList.innerHTML = '<li class="text-green-600">No expiry alerts.</li>';
+            }
+        } catch (error) {
+            console.error('Error fetching expiry alerts:', error);
+            expiryAlertsList.innerHTML = `<li class="text-red-500">Error loading expiry alerts: ${error.message}</li>`;
+        }
+
+        // Fetch Stock Alerts
+        try {
+            const response = await fetch(`${API_BASE_URL}/alerts/low_stock`);
+            if (!response.ok) throw new Error('Failed to fetch stock alerts.');
+            const stockAlerts = await response.json();
+
+            if (stockAlerts.outOfStock.length > 0) {
+                stockAlerts.outOfStock.forEach(batch => {
+                    const li = document.createElement('li');
+                    li.className = 'text-red-700 font-semibold';
+                    li.innerText = `Out of Stock: ${batch.product_name} (Batch: ${batch.batch_number}) is out of stock.`;
+                    stockAlertsList.appendChild(li);
+                });
+            }
+            if (stockAlerts.lowStock.length > 0) {
+                stockAlerts.lowStock.forEach(batch => {
+                    const li = document.createElement('li');
+                    li.className = 'text-red-600';
+                    li.innerText = `Low Stock: ${batch.product_name} (Batch: ${batch.batch_number}) has only ${batch.quantity} units left.`;
+                    stockAlertsList.appendChild(li);
+                });
+            }
+            if (stockAlerts.outOfStock.length === 0 && stockAlerts.lowStock.length === 0) {
+                stockAlertsList.innerHTML = '<li class="text-green-600">No stock alerts.</li>';
+            }
+        } catch (error) {
+            console.error('Error fetching stock alerts:', error);
+            stockAlertsList.innerHTML = `<li class="text-red-500">Error loading stock alerts: ${error.message}</li>`;
+        }
+
+        // Fetch Temperature Alerts
+        try {
+            const response = await fetch(`${API_BASE_URL}/alerts/temperature`);
+            if (!response.ok) throw new Error('Failed to fetch temperature alerts.');
+            const tempAlerts = await response.json();
+
+            if (tempAlerts.length > 0) {
+                tempAlerts.forEach(alert => {
+                    const li = document.createElement('li');
+                    let alertClass = 'text-red-700 font-semibold';
+                    if (alert.alert_type === 'No Readings') {
+                        alertClass = 'text-yellow-600';
+                    }
+                    li.className = alertClass;
+                    li.innerText = `Location ${alert.location_name}: ${alert.message}`;
+                    temperatureAlertsList.appendChild(li);
+                });
+            } else {
+                temperatureAlertsList.innerHTML = '<li class="text-green-600">No temperature alerts.</li>';
+            }
+        } catch (error) {
+            console.error('Error fetching temperature alerts:', error);
+            temperatureAlertsList.innerHTML = `<li class="text-red-500">Error loading temperature alerts: ${error.message}</li>`;
+        }
+    }
+
+    // --- Barcode View Modal Functions ---
+    function showBarcodeModal(btn) {
+        const batchNumber = btn.getAttribute('data-batch-number');
+        const barcodeString = btn.getAttribute('data-barcode'); // Get barcode string from data attribute
+
+        const barcodeViewModal = document.getElementById('barcodeViewModal');
+        const viewBarcodeBatchNumber = document.getElementById('viewBarcodeBatchNumber');
+        const viewBarcodeSvg = document.getElementById('viewBarcodeSvg');
+        const viewBarcodeInfo = document.getElementById('viewBarcodeInfo');
+
+        viewBarcodeBatchNumber.innerText = batchNumber;
+
+        try {
+            // Clear previous barcode to prevent rendering issues
+            viewBarcodeSvg.innerHTML = '';
+            JsBarcode("#viewBarcodeSvg", barcodeString, {
+                format: "CODE128",
+                displayValue: true,
+                height: 100,
+                width: 2.5, // Slightly larger for better view
+                margin: 10
+            });
+            viewBarcodeInfo.innerText = `Barcode: ${barcodeString}`;
+            barcodeViewModal.style.display = 'flex';
+        } catch (e) {
+            console.error("Error generating barcode for view:", e);
+            viewBarcodeInfo.innerText = "Error generating barcode. Please ensure batch number is valid.";
+            barcodeViewModal.style.display = 'flex';
+        }
+    }
+
+    function closeBarcodeViewModal() {
+        document.getElementById('barcodeViewModal').style.display = 'none';
+    }
+
+    function printViewedBarcode() {
+        const printWindow = window.open('', '_blank', 'height=400,width=600');
+        printWindow.document.write('<html><head><title>Print Barcode</title>');
+        printWindow.document.write('</head><body>');
+        printWindow.document.write('<div style="text-align: center;">');
+        // Clone the SVG to ensure it prints correctly
+        const clonedSvg = document.getElementById('viewBarcodeSvg').cloneNode(true);
+            // It's important to remove width and height attributes set by JsBarcode directly on the SVG
+            // for it to scale properly when printed or viewed in a new window.
+            clonedSvg.removeAttribute('width');
+            clonedSvg.removeAttribute('height');
+            // Optionally, add a viewBox if not already present for better scaling
+            if (!clonedSvg.hasAttribute('viewBox')) {
+                 clonedSvg.setAttribute('viewBox', `0 0 ${clonedSvg.getBBox().width} ${clonedSvg.getBBox().height}`);
+            }
+
+        printWindow.document.body.appendChild(clonedSvg);
+        printWindow.document.write('</div>');
+        printWindow.document.close();
+        printWindow.print();
+    }
+
+
+</script>
+
+</body>
+</html>
